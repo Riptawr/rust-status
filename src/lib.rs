@@ -8,7 +8,18 @@ pub struct ThreadPool {
     sender: mpsc::Sender<Job>
 }
 
-type Job = Box<FnOnce() + Send + 'static>;
+// workaround until compiler is fixed for taking ownership of closures inside boxes
+trait FnBox {
+    fn call_box(self: Box<Self>);
+}
+
+impl<F: FnOnce()> FnBox for F {
+    fn call_box(self: Box<F>) {
+        (*self)()
+    }
+}
+
+type Job = Box<FnBox + Send + 'static>;
 
 struct Worker {
     id: usize,
@@ -22,7 +33,7 @@ impl Worker {
                 let job = receiver.lock().unwrap().recv().unwrap();
 
                 println!("Worker {} got a job; executing.", id);
-                (*job)();
+                job.call_box();
             }
         });
 
